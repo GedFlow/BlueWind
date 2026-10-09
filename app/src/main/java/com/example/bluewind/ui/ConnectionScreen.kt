@@ -160,7 +160,7 @@ private fun StatusCard(
         Status.REGISTER_FAILED -> Color(0xFFE57373) to "HID 장치 등록 실패"
         Status.READY -> Color.Gray to "PC 연결 대기 중"
         Status.CONNECTING -> Color(0xFFFFB74D) to "연결 중: $hostName"
-        Status.CONNECTED -> Color(0xFF81C784) to "연결됨: $hostName"
+        Status.CONNECTED -> Color(0xFF4FC3F7) to "연결됨: $hostName"
         Status.DISCONNECTING -> Color(0xFFFFB74D) to "연결 끊는 중: $hostName"
     }
 

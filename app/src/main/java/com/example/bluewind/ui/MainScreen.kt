@@ -146,7 +146,7 @@ private fun ConnectionStatusButton(
     modifier: Modifier = Modifier,
 ) {
     val (color, label) = when (state.status) {
-        Status.CONNECTED -> Color(0xFF81C784) to "연결됨"
+        Status.CONNECTED -> Color(0xFF4FC3F7) to "연결됨"
         Status.CONNECTING, Status.REGISTERING, Status.DISCONNECTING -> Color(0xFFFFB74D) to "연결 중"
         Status.READY, Status.NOT_STARTED -> Color.Gray to "연결 안 됨"
         Status.BLUETOOTH_OFF, Status.NOT_SUPPORTED, Status.REGISTER_FAILED -> Color(0xFFE57373) to "오류"

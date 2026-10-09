@@ -6,9 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -16,6 +14,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.bluewind.hid.HidManager
 import com.example.bluewind.ui.BlueWindApp
+import com.example.bluewind.ui.BlueWindTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -29,7 +28,7 @@ class MainActivity : ComponentActivity() {
             HidManager.quitRequests.collect { finishAndRemoveTask() }
         }
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            BlueWindTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     BlueWindApp()
                 }

@@ -1,4 +1,6 @@
 <resources>
     <!-- 화면은 Compose가 그린다. 이 테마는 Compose가 그리기 전 창 배경용. -->
-    <style name="Theme.BlueWind" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.BlueWind" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bluewind_background</item>
+    </style>
 </resources>
