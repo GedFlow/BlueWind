@@ -18,6 +18,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <!-- 키보드 키를 누를 때 진동 -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 앱이 화면에서 벗어나도 HID 연결을 유지하는 Foreground Service + 상단 알림 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -40,6 +44,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".hid.HidService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 
 </manifest>

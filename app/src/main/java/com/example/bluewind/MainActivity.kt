@@ -13,8 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.bluewind.hid.HidManager
 import com.example.bluewind.ui.BlueWindApp
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,6 +24,10 @@ class MainActivity : ComponentActivity() {
         Log.i(TAG, "MainActivity onCreate")
         enableEdgeToEdge()
         hideStatusBar()
+        // 알림의 "종료"를 누르면 화면도 닫는다
+        lifecycleScope.launch {
+            HidManager.quitRequests.collect { finishAndRemoveTask() }
+        }
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(modifier = Modifier.fillMaxSize()) {

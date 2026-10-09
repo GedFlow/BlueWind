@@ -45,6 +45,19 @@ private val bluetoothPermissions: Array<String> =
         emptyArray()
     }
 
+// Android 13+: 상단 알림(연결 유지 서비스) 표시용. 거부해도 연결 유지는 동작한다.
+private val notificationPermissions: Array<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(Manifest.permission.POST_NOTIFICATIONS)
+    } else {
+        emptyArray()
+    }
+
+private fun missingPermissions(context: Context): Array<String> =
+    (bluetoothPermissions + notificationPermissions)
+        .filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+        .toTypedArray()
+
 private fun hasConnectPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
@@ -66,7 +79,8 @@ fun BlueWindApp() {
     }
 
     LaunchedEffect(Unit) {
-        if (!hasPermission) permissionLauncher.launch(bluetoothPermissions)
+        val missing = missingPermissions(context)
+        if (missing.isNotEmpty()) permissionLauncher.launch(missing)
     }
 
     // 설정 화면에서 권한을 바꾸고 돌아온 경우, 다른 곳에서 페어링하고 돌아온 경우 반영

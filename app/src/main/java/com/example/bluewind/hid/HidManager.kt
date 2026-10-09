@@ -17,7 +17,10 @@ import androidx.annotation.MainThread
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.example.bluewind.TAG
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -101,6 +104,8 @@ object HidManager {
         started = true
         appContext = context.applicationContext
         Log.i(TAG, "HidManager start")
+        // 앱이 화면에서 벗어나도 HID 등록이 해제되지 않게 Foreground Service를 띄운다
+        HidService.start(appContext)
 
         val adapter = appContext.getSystemService(BluetoothManager::class.java)?.adapter
         if (adapter == null) {
@@ -133,8 +138,21 @@ object HidManager {
         hidDevice?.unregisterApp()
         closeProxy()
         runCatching { appContext.unregisterReceiver(receiver) }
+        HidService.stop(appContext)
         _state.value = State()
         _pairedDevices.value = emptyList()
+    }
+
+    private val _quitRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** 알림의 "종료" 등으로 앱 종료를 요청받았을 때. 화면(Activity)이 이걸 받아 스스로 닫는다. */
+    val quitRequests: SharedFlow<Unit> = _quitRequests.asSharedFlow()
+
+    /** HID 등록 해제 + 서비스 종료 + 화면 닫기 */
+    @MainThread
+    fun quit() {
+        stop()
+        _quitRequests.tryEmit(Unit)
     }
 
     /** 등록 실패 후 다시 시도 (예: 다른 HID 앱을 강제 종료한 뒤) */
