@@ -3,6 +3,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// 사용자에게 전달하는 빌드마다 버전 0.1, 빌드 번호 1씩 올린다. 버그 없는 버전이 나오면 1.0.
+val appVersionName = "0.1"
+val appVersionCode = 2
+
 android {
     namespace = "com.example.bluewind"
     compileSdk {
@@ -14,8 +18,8 @@ android {
         // BluetoothHidDevice API가 Android 9(API 28)부터 있다
         minSdk = 28
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,7 +38,18 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+}
+
+// assembleDebug가 끝나면 dist/bluewind_v<버전>.apk 로 복사한다
+val distApk = tasks.register<Copy>("distApk") {
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(rootProject.layout.projectDirectory.dir("dist"))
+    rename("app-debug.apk", "bluewind_v$appVersionName.apk")
+}
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy(distApk)
 }
 
 dependencies {

@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,10 +50,13 @@ private fun hasConnectPermission(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
         PackageManager.PERMISSION_GRANTED
 
+private enum class Screen { MAIN, CONNECTION, KEYBOARD }
+
 @Composable
 fun BlueWindApp() {
     val context = LocalContext.current
     var hasPermission by remember { mutableStateOf(hasConnectPermission(context)) }
+    var screen by rememberSaveable { mutableStateOf(Screen.MAIN) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -82,7 +86,14 @@ fun BlueWindApp() {
             .safeDrawingPadding(),
     ) {
         if (hasPermission) {
-            ConnectionScreen()
+            when (screen) {
+                Screen.MAIN -> MainScreen(
+                    onOpenConnection = { screen = Screen.CONNECTION },
+                    onOpenKeyboard = { screen = Screen.KEYBOARD },
+                )
+                Screen.CONNECTION -> ConnectionScreen(onBack = { screen = Screen.MAIN })
+                Screen.KEYBOARD -> KeyboardPanel(onClose = { screen = Screen.MAIN })
+            }
         } else {
             PermissionScreen(
                 onRequest = { permissionLauncher.launch(bluetoothPermissions) },

@@ -21,8 +21,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 /**
  * 블루투스 HID 장치 등록·연결을 관리하는 앱 수준 싱글톤.
@@ -67,8 +68,11 @@ object HidManager {
     private val _pairedDevices = MutableStateFlow<List<PairedDevice>>(emptyList())
     val pairedDevices: StateFlow<List<PairedDevice>> = _pairedDevices.asStateFlow()
 
-    // HID 콜백을 받는 전용 스레드
-    private val hidExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    // HID 콜백 수신과 리포트 전송을 모두 이 한 스레드에서 순서대로 처리한다
+    private val hidExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
+
+    // 마우스 이동·스크롤을 모아서 보내는 간격 (리포트 폭주 방지). 실기기에서 튜닝한다.
+    private const val MOUSE_REPORT_INTERVAL_MS = 10L
 
     private lateinit var appContext: Context
     private var adapter: BluetoothAdapter? = null
@@ -167,6 +171,177 @@ object HidManager {
 
     /** Windows에서 찾을 때 보이는 이 폰의 블루투스 이름 */
     fun phoneName(): String? = adapter?.name
+
+    // ---- 리포트 전송 ----
+    // 모든 전송은 hidExecutor 한 스레드에서 순서대로 처리한다.
+
+    /** Consumer 키(볼륨 등) 한 번: 누름 → 뗌을 한 묶음으로 보낸다. */
+    fun sendConsumerClick(usage: Int) {
+        hidExecutor.execute {
+            val host = connectedHost() ?: return@execute
+            val press = byteArrayOf((usage and 0xFF).toByte(), ((usage shr 8) and 0xFF).toByte())
+            sendReport(host, HidDescriptor.REPORT_ID_CONSUMER, press)
+            sendReport(host, HidDescriptor.REPORT_ID_CONSUMER, ByteArray(HidDescriptor.CONSUMER_REPORT_SIZE))
+        }
+    }
+
+    // ---- 키보드 ----
+    // usage별 누름 횟수 (hidExecutor 스레드에서만 접근). 누른 순서를 유지해 앞의 6개를 보낸다.
+    private val keyPressCounts = LinkedHashMap<Int, Int>()
+
+    fun keyDown(usage: Int) {
+        hidExecutor.execute {
+            keyPressCounts[usage] = (keyPressCounts[usage] ?: 0) + 1
+            sendKeyboardState()
+        }
+    }
+
+    fun keyUp(usage: Int) {
+        hidExecutor.execute {
+            val count = keyPressCounts[usage] ?: return@execute
+            if (count <= 1) keyPressCounts.remove(usage) else keyPressCounts[usage] = count - 1
+            sendKeyboardState()
+        }
+    }
+
+    /** 키보드 패널을 닫을 때 등: 눌린 키가 PC에 남지 않도록 모두 뗀다. */
+    fun releaseAllKeys() {
+        hidExecutor.execute {
+            if (keyPressCounts.isEmpty()) return@execute
+            keyPressCounts.clear()
+            sendKeyboardState()
+        }
+    }
+
+    private fun sendKeyboardState() {
+        val host = connectedHost() ?: return
+        val report = ByteArray(HidDescriptor.KEYBOARD_REPORT_SIZE)
+        var modifiers = 0
+        var slot = 2 // [0]=modifier, [1]=reserved, [2..7]=key1~key6
+        for (usage in keyPressCounts.keys) {
+            if (KeyUsage.isModifier(usage)) {
+                modifiers = modifiers or KeyUsage.modifierBit(usage)
+            } else if (slot < report.size) {
+                report[slot++] = usage.toByte()
+            }
+        }
+        report[0] = modifiers.toByte()
+        sendReport(host, HidDescriptor.REPORT_ID_KEYBOARD, report)
+    }
+
+    // ---- 마우스 ----
+    private val mouseLock = Any()
+    private var pendingX = 0f
+    private var pendingY = 0f
+    private var pendingWheel = 0f
+    private var pendingPan = 0f
+    private var mouseFlushScheduled = false
+
+    // 눌린 마우스 버튼 비트 (hidExecutor 스레드에서만 접근)
+    private var mouseButtons = 0
+
+    /** 커서 이동량(마우스 카운트)을 누적한다. 소수점 이하는 다음 리포트로 넘긴다. */
+    fun moveMouse(dx: Float, dy: Float) {
+        accumulateMouse { pendingX += dx; pendingY += dy }
+    }
+
+    /** 스크롤량(휠 칸 수)을 누적한다. wheel: +위, pan: +오른쪽 */
+    fun scrollMouse(wheel: Float, pan: Float) {
+        accumulateMouse { pendingWheel += wheel; pendingPan += pan }
+    }
+
+    fun mouseClick(button: Int) {
+        hidExecutor.execute {
+            flushMouse()
+            setMouseButtons(mouseButtons or button)
+            setMouseButtons(mouseButtons and button.inv())
+        }
+    }
+
+    fun mouseButtonDown(button: Int) {
+        hidExecutor.execute {
+            flushMouse()
+            setMouseButtons(mouseButtons or button)
+        }
+    }
+
+    fun mouseButtonUp(button: Int) {
+        hidExecutor.execute {
+            flushMouse()
+            setMouseButtons(mouseButtons and button.inv())
+        }
+    }
+
+    /** 트랙패드 화면을 벗어날 때 등: 눌린 버튼을 모두 뗀다. */
+    fun releaseMouseButtons() {
+        hidExecutor.execute {
+            flushMouse()
+            if (mouseButtons != 0) setMouseButtons(0)
+        }
+    }
+
+    private inline fun accumulateMouse(block: () -> Unit) {
+        val schedule: Boolean
+        synchronized(mouseLock) {
+            block()
+            schedule = !mouseFlushScheduled
+            mouseFlushScheduled = true
+        }
+        if (schedule) hidExecutor.schedule(::flushMouse, MOUSE_REPORT_INTERVAL_MS, TimeUnit.MILLISECONDS)
+    }
+
+    private fun setMouseButtons(buttons: Int) {
+        mouseButtons = buttons
+        val host = connectedHost() ?: return
+        sendMouseReport(host, 0, 0, 0, 0)
+    }
+
+    private fun flushMouse() {
+        var x: Int
+        var y: Int
+        var wheel: Int
+        var pan: Int
+        synchronized(mouseLock) {
+            mouseFlushScheduled = false
+            x = pendingX.toInt(); pendingX -= x
+            y = pendingY.toInt(); pendingY -= y
+            wheel = pendingWheel.toInt(); pendingWheel -= wheel
+            pan = pendingPan.toInt(); pendingPan -= pan
+        }
+        val host = connectedHost() ?: return
+        // X/Y/Wheel/Pan은 int8(-127~127). 큰 값은 여러 리포트로 나눈다.
+        while (x != 0 || y != 0 || wheel != 0 || pan != 0) {
+            val cx = x.coerceIn(-127, 127)
+            val cy = y.coerceIn(-127, 127)
+            val cw = wheel.coerceIn(-127, 127)
+            val cp = pan.coerceIn(-127, 127)
+            sendMouseReport(host, cx, cy, cw, cp)
+            x -= cx; y -= cy; wheel -= cw; pan -= cp
+        }
+    }
+
+    private fun sendMouseReport(host: BluetoothDevice, x: Int, y: Int, wheel: Int, pan: Int) {
+        val report = byteArrayOf(mouseButtons.toByte(), x.toByte(), y.toByte(), wheel.toByte(), pan.toByte())
+        sendReport(host, HidDescriptor.REPORT_ID_MOUSE, report)
+    }
+
+    /** 연결이 바뀌면 이전 입력 상태를 버린다 (새 연결에 눌린 키·버튼이 넘어가지 않게). hidExecutor 스레드. */
+    private fun resetInputState() {
+        keyPressCounts.clear()
+        mouseButtons = 0
+        synchronized(mouseLock) {
+            pendingX = 0f; pendingY = 0f; pendingWheel = 0f; pendingPan = 0f
+        }
+    }
+
+    private fun connectedHost(): BluetoothDevice? =
+        _state.value.takeIf { it.status == Status.CONNECTED }?.host?.device
+
+    private fun sendReport(host: BluetoothDevice, reportId: Byte, data: ByteArray): Boolean {
+        val ok = hidDevice?.sendReport(host, reportId.toInt(), data) ?: false
+        if (!ok) Log.w(TAG, "sendReport failed id=$reportId data=${data.toHex()}")
+        return ok
+    }
 
     // ---- 프록시 / 등록 ----
 
@@ -278,6 +453,9 @@ object HidManager {
             val paired = device.toPaired()
             Log.i(TAG, "onConnectionStateChanged ${paired.describe()} → ${connectionStateName(state)}")
             if (!started) return
+            if (state == BluetoothProfile.STATE_CONNECTED || state == BluetoothProfile.STATE_DISCONNECTED) {
+                resetInputState()
+            }
             _state.update { current ->
                 when (state) {
                     BluetoothProfile.STATE_CONNECTING -> State(Status.CONNECTING, host = paired)

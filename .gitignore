@@ -22,3 +22,6 @@ local.properties
 keystore.properties
 signing.properties
 *.env
+
+# 사용자에게 전달하는 APK (빌드 결과물)
+/dist/

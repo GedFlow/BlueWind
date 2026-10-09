@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -29,6 +30,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -38,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.bluewind.BuildConfig
 import com.example.bluewind.TAG
 import com.example.bluewind.hid.HidManager
 import com.example.bluewind.hid.HidManager.PairedDevice
@@ -46,7 +49,8 @@ import com.example.bluewind.hid.HidManager.Status
 private const val DISCOVERABLE_SECONDS = 300
 
 @Composable
-fun ConnectionScreen(modifier: Modifier = Modifier) {
+fun ConnectionScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    BackHandler(onBack = onBack)
     val state by HidManager.state.collectAsStateWithLifecycle()
     val devices by HidManager.pairedDevices.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -89,7 +93,15 @@ fun ConnectionScreen(modifier: Modifier = Modifier) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("BlueWind", style = MaterialTheme.typography.headlineSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onBack) { Text("← 돌아가기") }
+                Text("연결", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    "BlueWind v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             StatusCard(
                 state = state,
                 onEnableBluetooth = { enableBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
