@@ -27,8 +27,11 @@ import kotlin.math.abs
 
 /** 트랙패드 설정값. 초기값은 실기기에서 튜닝한다. */
 object TrackpadConfig {
-    /** 커서 감도: 손가락 1dp 이동당 마우스 이동량 (v0.2: 2.0 → 2.2) */
-    const val CURSOR_SENSITIVITY = 2.2f
+    /** 커서 감도: 손가락 1dp 이동당 마우스 이동량 (v0.2: 2.0 → 2.2, v0.6: 2.2 → 2.42) */
+    const val CURSOR_SENSITIVITY = 2.42f
+
+    /** 세로 화면(리모컨·프레젠테이션) 트랙패드는 폭이 좁아서 30% 더 빠르게 */
+    const val PORTRAIT_SENSITIVITY_SCALE = 1.3f
 
     /** 스크롤 감도: 휠 1칸에 필요한 손가락 이동 dp (작을수록 빠르다) */
     const val SCROLL_DP_PER_NOTCH = 20f
@@ -47,11 +50,13 @@ private const val DEFAULT_HINT = "한 손가락: 이동 · 탭 클릭 · 탭 후
 
 /**
  * @param movementOnly true면 커서 이동만 한다 (클릭·스크롤 없음). 프레젠테이션 레이저 포인터용.
+ * @param sensitivityScale 커서 감도 배율 (세로 화면은 [TrackpadConfig.PORTRAIT_SENSITIVITY_SCALE])
  */
 @Composable
 fun Trackpad(
     modifier: Modifier = Modifier,
     movementOnly: Boolean = false,
+    sensitivityScale: Float = 1f,
     hint: String = DEFAULT_HINT,
 ) {
     val scope = rememberCoroutineScope()
@@ -62,8 +67,8 @@ fun Trackpad(
     Box(
         modifier = modifier
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-            .pointerInput(movementOnly) {
-                if (movementOnly) movementOnlyGestures() else trackpadGestures(scope)
+            .pointerInput(movementOnly, sensitivityScale) {
+                if (movementOnly) movementOnlyGestures(sensitivityScale) else trackpadGestures(scope, sensitivityScale)
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -86,9 +91,9 @@ private enum class Mode {
     IGNORE, // 세 손가락 이상
 }
 
-private suspend fun PointerInputScope.trackpadGestures(scope: CoroutineScope) {
+private suspend fun PointerInputScope.trackpadGestures(scope: CoroutineScope, sensitivityScale: Float) {
     val slop = viewConfiguration.touchSlop
-    val countsPerPx = TrackpadConfig.CURSOR_SENSITIVITY / density
+    val countsPerPx = TrackpadConfig.CURSOR_SENSITIVITY * sensitivityScale / density
     val notchesPerPx = 1f / (TrackpadConfig.SCROLL_DP_PER_NOTCH * density)
     val scrollSign = if (TrackpadConfig.INVERT_SCROLL) -1f else 1f
 
@@ -216,8 +221,8 @@ private suspend fun PointerInputScope.trackpadGestures(scope: CoroutineScope) {
 }
 
 /** 한 손가락 이동만 커서 이동으로 보낸다. 탭·두 손가락은 무시 (슬라이드쇼에서 클릭하면 슬라이드가 넘어가므로). */
-private suspend fun PointerInputScope.movementOnlyGestures() {
-    val countsPerPx = TrackpadConfig.CURSOR_SENSITIVITY / density
+private suspend fun PointerInputScope.movementOnlyGestures(sensitivityScale: Float) {
+    val countsPerPx = TrackpadConfig.CURSOR_SENSITIVITY * sensitivityScale / density
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false)
         while (true) {

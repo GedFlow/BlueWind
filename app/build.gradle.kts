@@ -4,8 +4,8 @@ plugins {
 }
 
 // 사용자에게 전달하는 빌드마다 버전 0.1, 빌드 번호 1씩 올린다. 버그 없는 버전이 나오면 1.0.
-val appVersionName = "0.5"
-val appVersionCode = 6
+val appVersionName = "0.6"
+val appVersionCode = 7
 
 android {
     namespace = "com.example.bluewind"

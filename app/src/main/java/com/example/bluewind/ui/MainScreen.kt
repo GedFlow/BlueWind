@@ -34,18 +34,19 @@ import com.example.bluewind.hid.HidManager
 import com.example.bluewind.hid.HidManager.Status
 
 private val MENU_WIDTH = 128.dp
-private val VOLUME_BUTTON_HEIGHT = 64.dp
+private val VOLUME_BUTTON_HEIGHT = 56.dp
 
 /**
  * 메인 화면: 트랙패드가 화면 전체.
  * - 좌상단: 키보드 버튼 (항상 표시)
- * - 우상단: 연결 상태 버튼. 누르면 아래로 볼륨 버튼, 왼쪽으로 연결 설정·프레젠테이션 버튼이 펼쳐진다.
+ * - 우상단: 연결 상태 버튼. 누르면 아래로 볼륨 버튼·리모컨 모드, 왼쪽으로 연결 설정·프레젠테이션 버튼이 펼쳐진다.
  */
 @Composable
 fun MainScreen(
     onOpenConnection: () -> Unit,
     onOpenKeyboard: () -> Unit,
     onOpenPresentation: () -> Unit,
+    onOpenRemote: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by HidManager.state.collectAsStateWithLifecycle()
@@ -121,6 +122,14 @@ fun MainScreen(
                         label = "음소거",
                         onFire = { HidManager.sendConsumerClick(ConsumerUsage.MUTE) },
                         enabled = connected,
+                        modifier = volumeModifier,
+                    )
+                    PanelButton(
+                        label = "리모컨 모드",
+                        onClick = {
+                            menuOpen = false
+                            onOpenRemote()
+                        },
                         modifier = volumeModifier,
                     )
                 }

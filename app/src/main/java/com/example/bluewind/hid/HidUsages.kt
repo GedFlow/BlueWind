@@ -5,6 +5,10 @@ object ConsumerUsage {
     const val VOLUME_UP = 0xE9
     const val VOLUME_DOWN = 0xEA
     const val MUTE = 0xE2
+
+    // 화면 밝기. Windows가 밝기를 조절할 수 있는 내장 디스플레이(노트북)에서만 동작할 수 있다.
+    const val BRIGHTNESS_UP = 0x6F
+    const val BRIGHTNESS_DOWN = 0x70
 }
 
 /** 마우스 리포트 버튼 비트 */
@@ -53,6 +57,13 @@ object KeyUsage {
     const val LEFT = 0x50
     const val DOWN = 0x51
     const val UP = 0x52
+
+    // 키패드 연산자·Enter (NumLock과 무관하게 동작)
+    const val KP_SLASH = 0x54
+    const val KP_ASTERISK = 0x55
+    const val KP_MINUS = 0x56
+    const val KP_PLUS = 0x57
+    const val KP_ENTER = 0x58
 
     // Modifier (0xE0~0xE7). 리포트에서는 첫 바이트의 비트로 보낸다.
     const val LEFT_CTRL = 0xE0

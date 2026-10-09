@@ -3,11 +3,13 @@ package com.example.bluewind.ui
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +65,13 @@ private fun hasConnectPermission(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
         PackageManager.PERMISSION_GRANTED
 
-private enum class Screen { MAIN, CONNECTION, KEYBOARD, PRESENTATION }
+private enum class Screen(val portrait: Boolean = false) {
+    MAIN,
+    CONNECTION,
+    KEYBOARD,
+    PRESENTATION(portrait = true),
+    REMOTE(portrait = true),
+}
 
 @Composable
 fun BlueWindApp() {
@@ -94,6 +102,16 @@ fun BlueWindApp() {
         if (hasPermission) HidManager.start(context)
     }
 
+    // 화면별 방향 고정 (센서 회전 없음): 리모컨·프레젠테이션은 세로, 나머지는 가로
+    val activity = LocalActivity.current
+    LaunchedEffect(screen) {
+        activity?.requestedOrientation = if (screen.portrait) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -105,10 +123,15 @@ fun BlueWindApp() {
                     onOpenConnection = { screen = Screen.CONNECTION },
                     onOpenKeyboard = { screen = Screen.KEYBOARD },
                     onOpenPresentation = { screen = Screen.PRESENTATION },
+                    onOpenRemote = { screen = Screen.REMOTE },
                 )
                 Screen.CONNECTION -> ConnectionScreen(onBack = { screen = Screen.MAIN })
                 Screen.KEYBOARD -> KeyboardPanel(onClose = { screen = Screen.MAIN })
                 Screen.PRESENTATION -> PresentationScreen(
+                    onClose = { screen = Screen.MAIN },
+                    onOpenConnection = { screen = Screen.CONNECTION },
+                )
+                Screen.REMOTE -> RemoteScreen(
                     onClose = { screen = Screen.MAIN },
                     onOpenConnection = { screen = Screen.CONNECTION },
                 )

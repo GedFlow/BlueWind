@@ -17,8 +17,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.example.bluewind.hid.HidManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -84,6 +86,59 @@ fun HoldButton(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(label, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+/**
+ * 키보드 키 하나처럼 동작하는 버튼: 손가락이 닿으면 키 누름, 떼면 키 뗌.
+ * 누르고 있을 때의 반복 입력은 PC가 처리한다 (방향키를 누르고 있으면 계속 이동).
+ */
+@Composable
+fun KeyButton(
+    label: String,
+    usage: Int,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    color: Color = MaterialTheme.colorScheme.surfaceVariant,
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    var pressed by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier.pointerInput(enabled, usage) {
+            if (!enabled) return@pointerInput
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                down.consume()
+                pressed = true
+                HidManager.keyDown(usage)
+                try {
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        change.consume()
+                        if (!change.pressed) break
+                    }
+                } finally {
+                    pressed = false
+                    HidManager.keyUp(usage)
+                }
+            }
+        },
+        shape = RoundedCornerShape(12.dp),
+        color = when {
+            !enabled -> color.copy(alpha = 0.4f)
+            pressed -> colors.primary
+            else -> color
+        },
+        contentColor = when {
+            !enabled -> contentColor.copy(alpha = 0.4f)
+            pressed -> colors.onPrimary
+            else -> contentColor
+        },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.titleLarge)
         }
     }
 }
