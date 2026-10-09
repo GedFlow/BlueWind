@@ -81,6 +81,14 @@ object HidManager {
     // 마우스 이동·스크롤을 모아서 보내는 간격 (리포트 폭주 방지). 실기기에서 튜닝한다.
     private const val MOUSE_REPORT_INTERVAL_MS = 10L
 
+    // 단축키(keyTap)를 사람이 누르는 것처럼 간격을 두고 보낸다
+    private const val KEY_TAP_STEP_MS = 25L // 키 하나씩 누르고 떼는 간격
+    private const val KEY_TAP_HOLD_MS = 60L // 모두 누른 상태로 유지하는 시간
+
+    // 뗌 리포트가 유실되면 PC에서 키·버튼이 눌린 채 남는다. 모두 뗀 상태를 이 시간 뒤 한 번 더 보낸다.
+    private const val RELEASE_CONFIRM_MS = 80L
+    private const val RETRY_MS = 20L
+
     private lateinit var appContext: Context
     private var adapter: BluetoothAdapter? = null
     private var proxyRequested = false
@@ -202,8 +210,13 @@ object HidManager {
         hidExecutor.execute {
             val host = connectedHost() ?: return@execute
             val press = byteArrayOf((usage and 0xFF).toByte(), ((usage shr 8) and 0xFF).toByte())
+            val release = ByteArray(HidDescriptor.CONSUMER_REPORT_SIZE)
             sendReport(host, HidDescriptor.REPORT_ID_CONSUMER, press)
-            sendReport(host, HidDescriptor.REPORT_ID_CONSUMER, ByteArray(HidDescriptor.CONSUMER_REPORT_SIZE))
+            sendReport(host, HidDescriptor.REPORT_ID_CONSUMER, release)
+            // 뗌 확인: 볼륨 키가 눌린 채 남으면 볼륨이 끝까지 올라간다
+            hidExecutor.schedule({
+                connectedHost()?.let { sendReport(it, HidDescriptor.REPORT_ID_CONSUMER, release) }
+            }, RELEASE_CONFIRM_MS, TimeUnit.MILLISECONDS)
         }
     }
 
@@ -220,27 +233,36 @@ object HidManager {
         }
     }
 
-    /** 단축키 한 번: 모두 누른 뒤 역순으로 뗀다. 예) keyTap(LEFT_SHIFT, F5) */
+    /**
+     * 단축키 한 번: 하나씩 누르고, 잠시 유지한 뒤, 역순으로 뗀다. 예) keyTap(LEFT_CTRL, L)
+     * 리포트를 한꺼번에 몰아 보내지 않고 사람이 누르는 것처럼 간격을 둔다.
+     */
     fun keyTap(vararg usages: Int) {
-        hidExecutor.execute {
-            for (usage in usages) {
-                keyPressCounts[usage] = (keyPressCounts[usage] ?: 0) + 1
-                sendKeyboardState()
-            }
-            for (usage in usages.reversed()) {
-                val count = keyPressCounts[usage] ?: continue
-                if (count <= 1) keyPressCounts.remove(usage) else keyPressCounts[usage] = count - 1
-                sendKeyboardState()
-            }
+        var delay = 0L
+        for (usage in usages) {
+            hidExecutor.schedule({ pressKey(usage) }, delay, TimeUnit.MILLISECONDS)
+            delay += KEY_TAP_STEP_MS
+        }
+        delay += KEY_TAP_HOLD_MS - KEY_TAP_STEP_MS
+        for (usage in usages.reversed()) {
+            hidExecutor.schedule({ releaseKey(usage) }, delay, TimeUnit.MILLISECONDS)
+            delay += KEY_TAP_STEP_MS
         }
     }
 
+    private fun pressKey(usage: Int) {
+        keyPressCounts[usage] = (keyPressCounts[usage] ?: 0) + 1
+        sendKeyboardState()
+    }
+
+    private fun releaseKey(usage: Int) {
+        val count = keyPressCounts[usage] ?: return
+        if (count <= 1) keyPressCounts.remove(usage) else keyPressCounts[usage] = count - 1
+        sendKeyboardState()
+    }
+
     fun keyUp(usage: Int) {
-        hidExecutor.execute {
-            val count = keyPressCounts[usage] ?: return@execute
-            if (count <= 1) keyPressCounts.remove(usage) else keyPressCounts[usage] = count - 1
-            sendKeyboardState()
-        }
+        hidExecutor.execute { releaseKey(usage) }
     }
 
     /** 키보드 패널을 닫을 때 등: 눌린 키가 PC에 남지 않도록 모두 뗀다. */
@@ -252,8 +274,30 @@ object HidManager {
         }
     }
 
+    // 키보드 상태가 바뀔 때마다 1씩 증가. 재전송 예약이 그사이 상태가 바뀌었는지 확인하는 데 쓴다.
+    private var keyboardStateVersion = 0
+
     private fun sendKeyboardState(): Boolean {
         val host = connectedHost() ?: return false
+        val version = ++keyboardStateVersion
+        val ok = sendReport(host, HidDescriptor.REPORT_ID_KEYBOARD, buildKeyboardReport())
+        when {
+            // 전송 실패: 잠시 뒤 현재 상태를 다시 보낸다
+            !ok -> scheduleKeyboardResend(version, RETRY_MS)
+            // 모두 뗀 상태: 뗌 리포트가 유실되어도 키가 눌린 채 남지 않게 한 번 더 보낸다
+            keyPressCounts.isEmpty() -> scheduleKeyboardResend(version, RELEASE_CONFIRM_MS)
+        }
+        return ok
+    }
+
+    private fun scheduleKeyboardResend(version: Int, delayMs: Long) {
+        hidExecutor.schedule({
+            if (version != keyboardStateVersion) return@schedule // 그사이 새 상태를 이미 보냄
+            connectedHost()?.let { sendReport(it, HidDescriptor.REPORT_ID_KEYBOARD, buildKeyboardReport()) }
+        }, delayMs, TimeUnit.MILLISECONDS)
+    }
+
+    private fun buildKeyboardReport(): ByteArray {
         val report = ByteArray(HidDescriptor.KEYBOARD_REPORT_SIZE)
         var modifiers = 0
         var slot = 2 // [0]=modifier, [1]=reserved, [2..7]=key1~key6
@@ -265,7 +309,7 @@ object HidManager {
             }
         }
         report[0] = modifiers.toByte()
-        return sendReport(host, HidDescriptor.REPORT_ID_KEYBOARD, report)
+        return report
     }
 
     /** 키보드 LED 출력 리포트: bit0 NumLock, bit1 CapsLock, bit2 ScrollLock */
@@ -347,6 +391,12 @@ object HidManager {
         mouseButtons = buttons
         val host = connectedHost() ?: return
         sendMouseReport(host, 0, 0, 0, 0)
+        if (buttons == 0) {
+            // 뗌 확인: 버튼이 눌린 채 남으면 계속 드래그된다
+            hidExecutor.schedule({
+                if (mouseButtons == 0) connectedHost()?.let { sendMouseReport(it, 0, 0, 0, 0) }
+            }, RELEASE_CONFIRM_MS, TimeUnit.MILLISECONDS)
+        }
     }
 
     private fun flushMouse() {

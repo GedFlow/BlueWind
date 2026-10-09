@@ -8,7 +8,8 @@ import com.example.bluewind.hid.KeyUsage
  * @param sub 보조 라벨 (두벌식 한글 또는 Shift 기호)
  * @param usage 보낼 HID usage. null이면 Fn(앱 내부 키)
  * @param fnLabel, fnUsage Fn 레이어에서 바뀌는 라벨과 usage. null이면 Fn 레이어에서도 그대로
- * @param isLetter 알파벳 키. CapsLock 상태에 따라 라벨을 대소문자로 바꾼다
+ * @param isLetter 알파벳 키. sub는 두벌식 한글. 한/영·CapsLock·Shift 상태에 따라 라벨을 바꾼다
+ * @param hangulShift Shift를 누르면 바뀌는 한글 (ㄲ, ㅆ, ㅒ 등)
  */
 data class KeyDef(
     val label: String,
@@ -18,11 +19,16 @@ data class KeyDef(
     val fnLabel: String? = null,
     val fnUsage: Int? = null,
     val isLetter: Boolean = false,
+    val hangulShift: String? = null,
 ) {
     val isFn: Boolean get() = usage == null
+
+    /** Shift는 앱 안에서 토글로 처리하고, 다른 키를 보낼 때 함께 보낸다 */
+    val isShift: Boolean get() = usage == KeyUsage.LEFT_SHIFT || usage == KeyUsage.RIGHT_SHIFT
 }
 
-private fun letter(c: Char, hangul: String) = KeyDef(c.toString(), KeyUsage.letter(c), sub = hangul, isLetter = true)
+private fun letter(c: Char, hangul: String, hangulShift: String? = null) =
+    KeyDef(c.toString(), KeyUsage.letter(c), sub = hangul, isLetter = true, hangulShift = hangulShift)
 
 private fun digit(c: Char, shifted: String, fn: Int) =
     KeyDef(c.toString(), KeyUsage.digit(c), sub = shifted, fnLabel = "F$fn", fnUsage = KeyUsage.f(fn))
@@ -48,16 +54,16 @@ val KEYBOARD_ROWS: List<List<KeyDef>> = listOf(
     ),
     listOf(
         KeyDef("Tab", KeyUsage.TAB, weight = 1.75f),
-        letter('Q', "ㅂ"),
-        letter('W', "ㅈ"),
-        letter('E', "ㄷ"),
-        letter('R', "ㄱ"),
-        letter('T', "ㅅ"),
+        letter('Q', "ㅂ", "ㅃ"),
+        letter('W', "ㅈ", "ㅉ"),
+        letter('E', "ㄷ", "ㄸ"),
+        letter('R', "ㄱ", "ㄲ"),
+        letter('T', "ㅅ", "ㅆ"),
         letter('Y', "ㅛ"),
         letter('U', "ㅕ"),
         letter('I', "ㅑ"),
-        letter('O', "ㅐ"),
-        letter('P', "ㅔ"),
+        letter('O', "ㅐ", "ㅒ"),
+        letter('P', "ㅔ", "ㅖ"),
         KeyDef("[", KeyUsage.LEFT_BRACKET, sub = "{"),
         KeyDef("]", KeyUsage.RIGHT_BRACKET, sub = "}"),
         KeyDef("\\", KeyUsage.BACKSLASH, sub = "|", weight = 1.75f, fnLabel = "Ins", fnUsage = KeyUsage.INSERT),

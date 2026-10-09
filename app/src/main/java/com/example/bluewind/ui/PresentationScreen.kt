@@ -59,7 +59,8 @@ fun PresentationScreen(
                 enabled = connected,
                 labelStyle = smallStyle,
             )
-            PanelButton("검은 화면", { HidManager.keyTap(KeyUsage.letter('B')) }, small, sub = "B", enabled = connected, labelStyle = smallStyle)
+            // PowerPoint 검은 화면은 B 또는 마침표(.). B는 Windows 입력기가 한글 상태면 'ㅠ'로 먹혀서 동작하지 않는다.
+            PanelButton("검은 화면", { HidManager.keyTap(KeyUsage.PERIOD) }, small, sub = ".", enabled = connected, labelStyle = smallStyle)
             PanelButton(
                 "레이저",
                 { HidManager.keyTap(KeyUsage.LEFT_CTRL, KeyUsage.letter('L')) },
