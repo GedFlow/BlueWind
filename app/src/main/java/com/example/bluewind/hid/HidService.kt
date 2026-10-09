@@ -57,17 +57,20 @@ class HidService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        // 상태가 바뀌면 알림 문구를 갱신한다
+        // 상태가 바뀌면 알림 문구를 갱신한다.
+        // 종료 중(NOT_STARTED)에는 올리지 않는다: 서비스가 멈춘 뒤에 올린 알림은 서비스와 상관없는
+        // 일반 알림이 되어 지워지지 않고 남는다 (v0.4까지 "준비 중" 알림이 남던 원인).
         scope.launch {
-            HidManager.state.collect { updateNotification(it) }
+            HidManager.state.collect { state ->
+                if (state.status != HidManager.Status.NOT_STARTED) updateNotification(state)
+            }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_QUIT) {
             Log.i(TAG, "HidService: 알림에서 종료")
-            HidManager.quit()
-            stopSelf()
+            quit()
             return START_NOT_STICKY
         }
         // startForegroundService()로 시작할 때마다 바로 포그라운드로 올려야 한다
@@ -93,6 +96,11 @@ class HidService : Service() {
     /** 최근 앱 목록에서 앱을 지우면 종료로 본다 */
     override fun onTaskRemoved(rootIntent: Intent?) {
         Log.i(TAG, "HidService: task removed → 종료")
+        quit()
+    }
+
+    private fun quit() {
+        scope.cancel() // 알림 갱신을 먼저 멈춘다
         HidManager.quit()
         stopSelf()
     }
@@ -100,6 +108,8 @@ class HidService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "HidService: destroyed")
         scope.cancel()
+        // 어떤 경로로 멈추든 알림이 남지 않게 지운다
+        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 
