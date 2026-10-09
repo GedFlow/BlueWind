@@ -50,7 +50,7 @@ private fun hasConnectPermission(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
         PackageManager.PERMISSION_GRANTED
 
-private enum class Screen { MAIN, CONNECTION, KEYBOARD }
+private enum class Screen { MAIN, CONNECTION, KEYBOARD, PRESENTATION }
 
 @Composable
 fun BlueWindApp() {
@@ -90,9 +90,14 @@ fun BlueWindApp() {
                 Screen.MAIN -> MainScreen(
                     onOpenConnection = { screen = Screen.CONNECTION },
                     onOpenKeyboard = { screen = Screen.KEYBOARD },
+                    onOpenPresentation = { screen = Screen.PRESENTATION },
                 )
                 Screen.CONNECTION -> ConnectionScreen(onBack = { screen = Screen.MAIN })
                 Screen.KEYBOARD -> KeyboardPanel(onClose = { screen = Screen.MAIN })
+                Screen.PRESENTATION -> PresentationScreen(
+                    onClose = { screen = Screen.MAIN },
+                    onOpenConnection = { screen = Screen.CONNECTION },
+                )
             }
         } else {
             PermissionScreen(

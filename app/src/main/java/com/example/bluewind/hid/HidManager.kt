@@ -68,6 +68,10 @@ object HidManager {
     private val _pairedDevices = MutableStateFlow<List<PairedDevice>>(emptyList())
     val pairedDevices: StateFlow<List<PairedDevice>> = _pairedDevices.asStateFlow()
 
+    // PC의 CapsLock 상태. PC가 보내는 키보드 LED 리포트로 갱신한다.
+    private val _capsLock = MutableStateFlow(false)
+    val capsLock: StateFlow<Boolean> = _capsLock.asStateFlow()
+
     // HID 콜백 수신과 리포트 전송을 모두 이 한 스레드에서 순서대로 처리한다
     private val hidExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
 
@@ -192,7 +196,24 @@ object HidManager {
     fun keyDown(usage: Int) {
         hidExecutor.execute {
             keyPressCounts[usage] = (keyPressCounts[usage] ?: 0) + 1
-            sendKeyboardState()
+            val sent = sendKeyboardState()
+            // LED 리포트가 오기 전에 라벨을 먼저 바꾼다. LED 리포트가 오면 그 값으로 맞춰진다.
+            if (sent && usage == KeyUsage.CAPS_LOCK) _capsLock.value = !_capsLock.value
+        }
+    }
+
+    /** 단축키 한 번: 모두 누른 뒤 역순으로 뗀다. 예) keyTap(LEFT_SHIFT, F5) */
+    fun keyTap(vararg usages: Int) {
+        hidExecutor.execute {
+            for (usage in usages) {
+                keyPressCounts[usage] = (keyPressCounts[usage] ?: 0) + 1
+                sendKeyboardState()
+            }
+            for (usage in usages.reversed()) {
+                val count = keyPressCounts[usage] ?: continue
+                if (count <= 1) keyPressCounts.remove(usage) else keyPressCounts[usage] = count - 1
+                sendKeyboardState()
+            }
         }
     }
 
@@ -213,8 +234,8 @@ object HidManager {
         }
     }
 
-    private fun sendKeyboardState() {
-        val host = connectedHost() ?: return
+    private fun sendKeyboardState(): Boolean {
+        val host = connectedHost() ?: return false
         val report = ByteArray(HidDescriptor.KEYBOARD_REPORT_SIZE)
         var modifiers = 0
         var slot = 2 // [0]=modifier, [1]=reserved, [2..7]=key1~key6
@@ -226,7 +247,21 @@ object HidManager {
             }
         }
         report[0] = modifiers.toByte()
-        sendReport(host, HidDescriptor.REPORT_ID_KEYBOARD, report)
+        return sendReport(host, HidDescriptor.REPORT_ID_KEYBOARD, report)
+    }
+
+    /** 키보드 LED 출력 리포트: bit0 NumLock, bit1 CapsLock, bit2 ScrollLock */
+    private fun handleOutputReport(reportId: Byte, data: ByteArray) {
+        if (reportId != HidDescriptor.REPORT_ID_KEYBOARD && reportId.toInt() != 0) return
+        // 스택에 따라 data 앞에 Report ID가 붙어 올 수 있다
+        val leds = when {
+            data.isEmpty() -> return
+            data.size >= 2 && data[0] == HidDescriptor.REPORT_ID_KEYBOARD -> data[1]
+            else -> data[0]
+        }.toInt()
+        val caps = (leds and 0x02) != 0
+        Log.i(TAG, "keyboard LED=0x%02X capsLock=%s".format(leds, caps))
+        _capsLock.value = caps
     }
 
     // ---- 마우스 ----
@@ -481,6 +516,7 @@ object HidManager {
 
         override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {
             Log.i(TAG, "onSetReport type=$type id=$id data=${data.toHex()}")
+            if (type == BluetoothHidDevice.REPORT_TYPE_OUTPUT) handleOutputReport(id, data)
             hidDevice?.reportError(device, BluetoothHidDevice.ERROR_RSP_SUCCESS)
         }
 
@@ -489,8 +525,9 @@ object HidManager {
         }
 
         override fun onInterruptData(device: BluetoothDevice, reportId: Byte, data: ByteArray) {
-            // 키보드 LED 출력 리포트(CapsLock 등)가 여기로 온다. 지금은 기록만 한다.
+            // 키보드 LED 출력 리포트(CapsLock 등)가 여기로 온다
             Log.i(TAG, "onInterruptData reportId=$reportId data=${data.toHex()}")
+            handleOutputReport(reportId, data)
         }
 
         override fun onVirtualCableUnplug(device: BluetoothDevice) {

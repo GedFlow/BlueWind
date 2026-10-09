@@ -27,8 +27,8 @@ import kotlin.math.abs
 
 /** 트랙패드 설정값. 초기값은 실기기에서 튜닝한다. */
 object TrackpadConfig {
-    /** 커서 감도: 손가락 1dp 이동당 마우스 이동량 */
-    const val CURSOR_SENSITIVITY = 2.0f
+    /** 커서 감도: 손가락 1dp 이동당 마우스 이동량 (v0.2: 2.0 → 2.2) */
+    const val CURSOR_SENSITIVITY = 2.2f
 
     /** 스크롤 감도: 휠 1칸에 필요한 손가락 이동 dp (작을수록 빠르다) */
     const val SCROLL_DP_PER_NOTCH = 20f
@@ -43,8 +43,17 @@ object TrackpadConfig {
     const val TAP_DRAG_WINDOW_MS = 220L
 }
 
+private const val DEFAULT_HINT = "한 손가락: 이동 · 탭 클릭 · 탭 후 끌기\n두 손가락: 스크롤 · 탭 우클릭"
+
+/**
+ * @param movementOnly true면 커서 이동만 한다 (클릭·스크롤 없음). 프레젠테이션 레이저 포인터용.
+ */
 @Composable
-fun Trackpad(modifier: Modifier = Modifier) {
+fun Trackpad(
+    modifier: Modifier = Modifier,
+    movementOnly: Boolean = false,
+    hint: String = DEFAULT_HINT,
+) {
     val scope = rememberCoroutineScope()
     // 드래그 중에 화면이 바뀌어도 왼쪽 버튼이 눌린 채 남지 않게 한다
     DisposableEffect(Unit) {
@@ -53,11 +62,13 @@ fun Trackpad(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-            .pointerInput(Unit) { trackpadGestures(scope) },
+            .pointerInput(movementOnly) {
+                if (movementOnly) movementOnlyGestures() else trackpadGestures(scope)
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            "한 손가락: 이동 · 탭 클릭 · 탭 후 끌기\n두 손가락: 스크롤 · 탭 우클릭",
+            hint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             textAlign = TextAlign.Center,
@@ -200,6 +211,25 @@ private suspend fun PointerInputScope.trackpadGestures(scope: CoroutineScope) {
             }
             Mode.TWO_FINGER -> if (quick && !moved && maxPointers == 2) HidManager.mouseClick(MouseButton.RIGHT)
             else -> flushTapClick()
+        }
+    }
+}
+
+/** 한 손가락 이동만 커서 이동으로 보낸다. 탭·두 손가락은 무시 (슬라이드쇼에서 클릭하면 슬라이드가 넘어가므로). */
+private suspend fun PointerInputScope.movementOnlyGestures() {
+    val countsPerPx = TrackpadConfig.CURSOR_SENSITIVITY / density
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        while (true) {
+            val event = awaitPointerEvent()
+            val pressed = event.changes.filter { it.pressed }
+            if (pressed.isEmpty()) break
+            val finger = pressed.singleOrNull()
+            if (finger != null && finger.previousPressed) {
+                val delta = finger.position - finger.previousPosition
+                HidManager.moveMouse(delta.x * countsPerPx, delta.y * countsPerPx)
+            }
+            event.changes.forEach { it.consume() }
         }
     }
 }

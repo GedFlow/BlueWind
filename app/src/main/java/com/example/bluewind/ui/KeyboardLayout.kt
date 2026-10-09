@@ -8,6 +8,7 @@ import com.example.bluewind.hid.KeyUsage
  * @param sub 보조 라벨 (두벌식 한글 또는 Shift 기호)
  * @param usage 보낼 HID usage. null이면 Fn(앱 내부 키)
  * @param fnLabel, fnUsage Fn 레이어에서 바뀌는 라벨과 usage. null이면 Fn 레이어에서도 그대로
+ * @param isLetter 알파벳 키. CapsLock 상태에 따라 라벨을 대소문자로 바꾼다
  */
 data class KeyDef(
     val label: String,
@@ -16,11 +17,12 @@ data class KeyDef(
     val weight: Float = 1f,
     val fnLabel: String? = null,
     val fnUsage: Int? = null,
+    val isLetter: Boolean = false,
 ) {
     val isFn: Boolean get() = usage == null
 }
 
-private fun letter(c: Char, hangul: String) = KeyDef(c.toString(), KeyUsage.letter(c), sub = hangul)
+private fun letter(c: Char, hangul: String) = KeyDef(c.toString(), KeyUsage.letter(c), sub = hangul, isLetter = true)
 
 private fun digit(c: Char, shifted: String, fn: Int) =
     KeyDef(c.toString(), KeyUsage.digit(c), sub = shifted, fnLabel = "F$fn", fnUsage = KeyUsage.f(fn))

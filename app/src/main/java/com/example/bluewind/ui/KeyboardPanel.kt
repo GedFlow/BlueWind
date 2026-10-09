@@ -1,5 +1,8 @@
 package com.example.bluewind.ui
 
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -8,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +51,19 @@ fun KeyboardPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
 
     val state by HidManager.state.collectAsStateWithLifecycle()
     val connected = state.status == HidManager.Status.CONNECTED
+    val capsLock by HidManager.capsLock.collectAsStateWithLifecycle()
+
+    // 키를 누를 때 아주 약한 진동
+    val context = LocalContext.current
+    val vibrator = remember { context.getSystemService(Vibrator::class.java) }
+    val keyTick = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+        } else {
+            VibrationEffect.createOneShot(10, 40)
+        }
+    }
+    val haptic = { vibrator?.vibrate(keyTick) }
 
     // Fn: 누르고 있는 동안 레이어 전환. 다른 키 없이 탭만 하면 고정/해제.
     var fnHeld by remember { mutableStateOf(false) }
@@ -59,16 +74,21 @@ fun KeyboardPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(SCREEN_PADDING),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // 닫기 버튼은 메인 화면의 키보드 버튼과 같은 자리
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CornerButton(label = "닫기", onClick = onClose)
             if (!connected) {
                 Text(
                     "PC에 연결되지 않았습니다",
                     style = MaterialTheme.typography.labelLarge,
                     color = Color(0xFFE57373),
-                    modifier = Modifier.padding(start = 8.dp),
                 )
             }
             if (fnLatched) {
@@ -76,11 +96,15 @@ fun KeyboardPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     "Fn 고정",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.padding(start = 8.dp),
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = onClose) { Text("닫기") }
+            if (capsLock) {
+                Text(
+                    "Caps Lock",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
         KEYBOARD_ROWS.forEach { row ->
             Row(
@@ -94,12 +118,15 @@ fun KeyboardPanel(onClose: () -> Unit, modifier: Modifier = Modifier) {
                         def = def,
                         fnActive = fnActive,
                         fnLatched = fnLatched,
+                        capsLock = capsLock,
                         onPress = { usage ->
+                            haptic()
                             if (fnHeld) usedWhileFnHeld = true
                             HidManager.keyDown(usage)
                         },
                         onRelease = { usage -> HidManager.keyUp(usage) },
                         onFnDown = {
+                            haptic()
                             fnHeld = true
                             usedWhileFnHeld = false
                         },
@@ -122,6 +149,7 @@ private fun Key(
     def: KeyDef,
     fnActive: Boolean,
     fnLatched: Boolean,
+    capsLock: Boolean,
     onPress: (usage: Int) -> Unit,
     onRelease: (usage: Int) -> Unit,
     onFnDown: () -> Unit,
@@ -177,8 +205,13 @@ private fun Key(
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val label = when {
+                showFnLayer -> def.fnLabel!!
+                def.isLetter && !capsLock -> def.label.lowercase()
+                else -> def.label
+            }
             Text(
-                if (showFnLayer) def.fnLabel!! else def.label,
+                label,
                 color = content,
                 fontSize = if (def.label.length > 2 || showFnLayer) 14.sp else 18.sp,
                 maxLines = 1,
