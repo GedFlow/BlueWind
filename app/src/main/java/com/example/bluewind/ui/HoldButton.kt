@@ -4,7 +4,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -18,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.example.bluewind.hid.HidManager
@@ -29,9 +32,12 @@ import kotlinx.coroutines.launch
 private const val REPEAT_INITIAL_DELAY_MS = 400L
 private const val REPEAT_INTERVAL_MS = 150L
 
+private val ICON_SIZE = 32.dp
+
 /**
  * 손가락이 닿는 순간 [onFire]를 한 번 호출한다.
  * [repeat]이면 누르고 있는 동안 일정 간격으로 계속 호출한다.
+ * @param icon 있으면 글자 대신 아이콘을 표시한다. 이때 [label]은 접근성 설명으로 쓴다.
  */
 @Composable
 fun HoldButton(
@@ -40,6 +46,7 @@ fun HoldButton(
     modifier: Modifier = Modifier,
     repeat: Boolean = false,
     enabled: Boolean = true,
+    icon: Painter? = null,
 ) {
     val scope = rememberCoroutineScope()
     val currentOnFire by rememberUpdatedState(onFire)
@@ -75,9 +82,14 @@ fun HoldButton(
                 } else {
                     null
                 }
-                waitForUpOrCancellation()
-                repeatJob?.cancel()
-                pressed = false
+                try {
+                    waitForUpOrCancellation()
+                } finally {
+                    // 누르고 있는 중에 연결 상태가 바뀌면(enabled 변경) 이 제스처가 취소된다.
+                    // 그때도 반복을 반드시 멈춘다. 안 멈추면 다시 연결됐을 때 볼륨이 끝까지 올라간다 (v0.7까지의 버그).
+                    repeatJob?.cancel()
+                    pressed = false
+                }
             }
         },
         shape = RoundedCornerShape(12.dp),
@@ -85,7 +97,11 @@ fun HoldButton(
         contentColor = content,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(label, style = MaterialTheme.typography.titleMedium)
+            if (icon != null) {
+                Icon(icon, contentDescription = label, modifier = Modifier.size(ICON_SIZE))
+            } else {
+                Text(label, style = MaterialTheme.typography.titleMedium)
+            }
         }
     }
 }

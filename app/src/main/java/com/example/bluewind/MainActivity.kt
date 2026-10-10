@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.i(TAG, "MainActivity onCreate")
         enableEdgeToEdge()
-        hideStatusBar()
+        hideSystemBars()
         // 알림의 "종료"를 누르면 화면도 닫는다
         lifecycleScope.launch {
             HidManager.quitRequests.collect { finishAndRemoveTask() }
@@ -39,14 +39,17 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         // 권한 창 등으로 포커스를 잃었다 돌아오면 다시 숨긴다
-        if (hasFocus) hideStatusBar()
+        if (hasFocus) hideSystemBars()
     }
 
-    /** 앱 사용 중 상단 상태 표시줄(시간·알림·배터리)을 숨긴다. 위에서 쓸어내리면 잠깐 보인다. */
-    private fun hideStatusBar() {
+    /**
+     * 앱 사용 중 상단 상태 표시줄(시간·알림·배터리)과 하단 내비게이션 바(홈·최근 앱 제스처 바)를 숨긴다 (v0.8).
+     * 화면 위·아래 끝에서 쓸면 잠깐 보인다. 하단 바가 보일 때 한 번 더 쓸어올리면 홈으로 나간다 (게임과 같은 방식).
+     */
+    private fun hideSystemBars() {
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.statusBars())
+            hide(WindowInsetsCompat.Type.systemBars())
         }
     }
 

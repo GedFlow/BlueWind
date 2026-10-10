@@ -26,9 +26,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.bluewind.R
 import com.example.bluewind.hid.ConsumerUsage
 import com.example.bluewind.hid.HidManager
 import com.example.bluewind.hid.HidManager.Status
@@ -109,6 +111,7 @@ fun MainScreen(
                         onFire = { HidManager.sendConsumerClick(ConsumerUsage.VOLUME_UP) },
                         repeat = true,
                         enabled = connected,
+                        icon = painterResource(R.drawable.ic_volume_up),
                         modifier = volumeModifier,
                     )
                     HoldButton(
@@ -116,12 +119,14 @@ fun MainScreen(
                         onFire = { HidManager.sendConsumerClick(ConsumerUsage.VOLUME_DOWN) },
                         repeat = true,
                         enabled = connected,
+                        icon = painterResource(R.drawable.ic_volume_down),
                         modifier = volumeModifier,
                     )
                     HoldButton(
                         label = "음소거",
                         onFire = { HidManager.sendConsumerClick(ConsumerUsage.MUTE) },
                         enabled = connected,
+                        icon = painterResource(R.drawable.ic_volume_mute),
                         modifier = volumeModifier,
                     )
                     PanelButton(

@@ -1,0 +1,17 @@
+<!-- 볼륨 + 버튼: 스피커 + 더하기. 색은 버튼 글자색으로 칠해진다 (Compose Icon tint). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 스피커 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,9 V15 H7 L12,20 V4 L7,9 Z" />
+    <!-- + -->
+    <path
+        android:pathData="M15,12 H21 M18,9 V15"
+        android:strokeWidth="2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round" />
+</vector>

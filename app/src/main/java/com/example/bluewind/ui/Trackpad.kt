@@ -112,6 +112,7 @@ private suspend fun PointerInputScope.trackpadGestures(scope: CoroutineScope, se
         var moved = false
         var travel = Offset.Zero
         var upTime = downTime
+        var cancelled = false
 
         // 앞 탭의 클릭을 미뤄둔 상태에서 드래그가 아닌 동작이 되면 그 클릭을 바로 보낸다
         fun flushTapClick() {
@@ -127,6 +128,9 @@ private suspend fun PointerInputScope.trackpadGestures(scope: CoroutineScope, se
             val pressedCount = changes.count { it.pressed }
             if (pressedCount == 0) {
                 upTime = changes.maxOf { it.uptimeMillis }
+                // 시스템 제스처(화면 끝에서 쓸기: 홈·뒤로·바 꺼내기)가 터치를 가로채면
+                // Compose는 이미 소비된 뗌을 보낸다. 이건 탭이 아니다 (PC에 엉뚱한 클릭이 가지 않게).
+                cancelled = changes.any { it.isConsumed }
                 changes.forEach { it.consume() }
                 break
             }
@@ -196,6 +200,12 @@ private suspend fun PointerInputScope.trackpadGestures(scope: CoroutineScope, se
                 Mode.IGNORE -> Unit
             }
             changes.forEach { it.consume() }
+        }
+
+        if (cancelled) {
+            // 드래그 중이었으면 버튼은 반드시 뗀다. 앞 탭은 사용자가 실제로 한 탭이므로 그 클릭은 보낸다.
+            if (mode == Mode.DRAG) HidManager.mouseButtonUp(MouseButton.LEFT) else flushTapClick()
+            return@awaitEachGesture
         }
 
         // 모든 손가락을 뗌
